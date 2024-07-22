@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "stupidwallet"
+version = "0.1.0"
+description = "The package which use StupidWallet API"
+authors = ["Alekzum <68947902+Alekzum@users.noreply.github.com>"]
+license = "GNU GPLv3"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+httpx = "^0.27.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
