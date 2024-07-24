@@ -85,8 +85,8 @@ class InvoiceMy:
     
     @property
     def is_expired(self):
-        cur_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=4), name="Samara"))
-        return cur_time > self.expiration_time
+        cur_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=4), name="Samara")).timestamp()
+        return cur_time > self.expiration_time.timestamp()
     
     @property
     def url(self):
@@ -147,7 +147,7 @@ class Wallet:
             r = await self._client.delete(url=path, **kwargs)
         else:
             raise ValueError(f'Excepted "post", "get", "delete", not {act!r}!')
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.33)
         return r.json()
     
     async def check_expired_invoices(self):
