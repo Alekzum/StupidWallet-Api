@@ -51,20 +51,20 @@ class PayHistory:
         self.pay_hash: str = source['pay_hash']
 
 
-class Invoice:
-    def __init__(self, source: dict):
-        self.invoice_unique_hash: str = source['invoice_unique_hash']
-        self.coin_id: int = source['coin_id']
-        self.coin_amount: int = source['coin_amount']
-        self.comment: str = source['comment']
-        _expiration_time = source['expiration_time']
-        self.expiration_time: Optional[datetime.datetime] = datetime.datetime.fromisoformat(_expiration_time) if _expiration_time else None
-        _creation_time = source['_creation_time']
-        self.creation_time: Optional[datetime.datetime] = datetime.datetime.fromisoformat(_creation_time) if _creation_time else None
-        self.return_url: str = source['return_url']
-        self.status: bool = source['status']
+# class Invoice:
+#     def __init__(self, source: dict):
+#         self.invoice_unique_hash: str = source['invoice_unique_hash']
+#         self.coin_id: int = source['coin_id']
+#         self.coin_amount: int = source['coin_amount']
+#         self.comment: str = source['comment']
+#         _expiration_time = source['expiration_time']
+#         self.expiration_time: Optional[datetime.datetime] = datetime.datetime.fromisoformat(_expiration_time) if _expiration_time else None
+#         _creation_time = source['_creation_time']
+#         self.creation_time: Optional[datetime.datetime] = datetime.datetime.fromisoformat(_creation_time) if _creation_time else None
+#         self.return_url: str = source['return_url']
+#         self.status: bool = source['status']
 
-    def __str__(self): return f"InvoiceInfo({self.invoice_unique_hash} id{self.coin_id}*{self.coin_amount})"    
+#     def __str__(self): return f"InvoiceInfo({self.invoice_unique_hash} id{self.coin_id}*{self.coin_amount})"    
 
 
 class InvoiceMy:
@@ -86,6 +86,10 @@ class InvoiceMy:
         cur_time = datetime.datetime.fromtimestamp(datetime.datetime.now().timestamp() - 60*60*1)
         expiration_time = self.expiration_time
         return cur_time > expiration_time
+    
+    @property
+    def url(self):
+        return f"https://t.me/stupidwallet_bot?start={self.invoice_unique_hash}"
 
     def __str__(self):
         return f"{type(self).__name__}({self.invoice_unique_hash} id{self.coin_id}*{self.coin_amount})"
@@ -122,7 +126,7 @@ class InvoiceInfo(InvoiceMy):
 class Wallet:
     _client: httpx.AsyncClient
     
-    def __init__(self, api_key: str, base_url: str = "https://sw.svat.dev"):
+    def __init__(self, api_key: str, base_url: str = "https://swapi.physm.org"):
         self._client = httpx.AsyncClient(base_url=base_url, headers={"api-key": api_key})
     
     async def _get_req(self, path, act: Literal["post", "get", "delete"] = "get", **kwargs) -> dict:
