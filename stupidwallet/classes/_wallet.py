@@ -1,16 +1,21 @@
+from dataclasses import dataclass
 from typing import Union, Literal, Optional
 import datetime
 import asyncio
 import httpx
 
 
+@dataclass()
 class ChequeMy:
-    def __init__(self, source: dict):
-        self.coin_id: int = source['coin_id']
-        self.coin_amount: int = source['coin_amount']
-        self.password: str = source['password']
-        self.cheque_id: str = source['cheque_id']
-        self.comment: str = source['comment']
+    coin_id: int
+    coin_amount: int
+    password: str
+    cheque_id: str
+    comment: str
+    
+    @property
+    def url(self):
+        return f"https://t.me/stupidwallet_bot?start={self.cheque_id}"
 
     def __str__(self):
         return f"<Cheque {self.cheque_id} id{self.coin_id}*{self.coin_amount}>"
@@ -19,15 +24,15 @@ class ChequeMy:
         return f"""{type(self).__name__}({dict([(name, getattr(self, name)) for name in dir(self) if name[0] != "_"])})"""
 
 
+@dataclass
 class Cheque(ChequeMy):
-    def __init__(self, source: dict):
-        self.status: bool = source['status']
-        self.coin_id: int = source['coin_id']
-        self.coin_amount: int = source['coin_amount']
-        self.is_activated: bool = source['is_activated']
-        self.has_password: bool = source['has_password']
-        self.comment: str = source['comment']
-        self.cheque_id: str = source['cheque_id']
+    status: bool
+    coin_id: int
+    coin_amount: int
+    is_activated: bool
+    has_password: bool
+    comment: str
+    cheque_id: str
     
     def __str__(self):
         return f"<Cheque {self.cheque_id} is_activated={self.is_activated} id{self.coin_id}*{self.coin_amount}>"
@@ -35,57 +40,53 @@ class Cheque(ChequeMy):
     def add_hash(self, hash: str):
         self.cheque_id = hash
 
-
+@dataclass
 class ChequeClaimed:
-    def __init__(self, source: dict):
-        self.status: bool = source['status']
-        self.coin_id: int = source['coin_id']
-        self.coin_amount: int = source['coin_amount']
+    """Info about claimed cheque: how much and which coin"""
+    status: bool
+    coin_id: int
+    """which coin has been taken"""
+    coin_amount: int
+    """how much coins has been taken"""
 
 
 class PayHistory:
-    def __init__(self, source: dict):
-        self.user_id: int = source['user_id']
-        _pay_time = source['pay_time']
-        self.pay_time: Optional[datetime.datetime] = datetime.datetime.fromisoformat(_pay_time) if _pay_time else None
-        self.pay_hash: str = source['pay_hash']
+    """Who payed this invoice and when, also have pay's hash"""
+    user_id: int
+    pay_time: datetime.datetime
+    pay_hash: str
 
-
-# class Invoice:
-#     def __init__(self, source: dict):
-#         self.invoice_unique_hash: str = source['invoice_unique_hash']
-#         self.coin_id: int = source['coin_id']
-#         self.coin_amount: int = source['coin_amount']
-#         self.comment: str = source['comment']
-#         _expiration_time = source['expiration_time']
-#         self.expiration_time: Optional[datetime.datetime] = datetime.datetime.fromisoformat(_expiration_time) if _expiration_time else None
-#         _creation_time = source['_creation_time']
-#         self.creation_time: Optional[datetime.datetime] = datetime.datetime.fromisoformat(_creation_time) if _creation_time else None
-#         self.return_url: str = source['return_url']
-#         self.status: bool = source['status']
-
-#     def __str__(self): return f"InvoiceInfo({self.invoice_unique_hash} id{self.coin_id}*{self.coin_amount})"    
+    def __init__(self,user_id,pay_time,pay_hash):
+        self.user_id = user_id
+        self.pay_time = datetime.datetime.fromisoformat(pay_time)
+        self.pay_hash = pay_hash
 
 
 class InvoiceMy:
     """Creator_id, invoice_unique_hash, coin_id, coin_amount, comment, expiration_time, creation_time, return_url"""
-    def __init__(self, source: dict):
-        self.creator_id: int = source['creator_id']
-        self.invoice_unique_hash: str = source['invoice_unique_hash']
-        self.coin_id: int = source['coin_id']
-        self.coin_amount: int = source['coin_amount']
-        self.comment: str = source['comment']
-        _expiration_time = source['expiration_time']
-        self.expiration_time: Optional[datetime.datetime] = datetime.datetime.fromisoformat(_expiration_time) if _expiration_time else None
-        _creation_time = source['_creation_time']
-        self.creation_time: Optional[datetime.datetime] = datetime.datetime.fromisoformat(_creation_time) if _creation_time else None
-        self.return_url: str = source['return_url']
+    creator_id: int
+    invoice_unique_hash: str
+    coin_id: int
+    coin_amount: int
+    comment: str
+    expiration_time: datetime.datetime
+    creation_time: datetime.datetime
+    return_url: str
+
+    def __init__(self,creator_id,invoice_unique_hash,coin_id,coin_amount,comment,expiration_time,creation_time,return_url):
+        self.creator_id = creator_id
+        self.invoice_unique_hash = invoice_unique_hash
+        self.coin_id = coin_id
+        self.coin_amount = coin_amount
+        self.comment = comment
+        self.expiration_time = datetime.datetime.fromisoformat(expiration_time)
+        self.creation_time = datetime.datetime.fromisoformat(creation_time)
+        self.return_url = return_url
     
     @property
     def is_expired(self):
-        cur_time = datetime.datetime.fromtimestamp(datetime.datetime.now().timestamp() - 60*60*1)
-        expiration_time = self.expiration_time
-        return cur_time > expiration_time
+        cur_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=4), name="Samara"))
+        return cur_time > self.expiration_time
     
     @property
     def url(self):
@@ -100,20 +101,28 @@ class InvoiceMy:
 
 class InvoiceInfo(InvoiceMy):
     """Status, creator_id, invoice_unique_hash, coin_id, coin_amount, comment, expiration_time, creation_time, return_url, pay_history"""
-    def __init__(self, source: dict):
-        self.status: bool = source['status']
-        self.creator_id: int = source['creator_id']
-        self.invoice_unique_hash: str = source['invoice_unique_hash']
-        self.coin_id: int = source['coin_id']
-        self.coin_amount: int = source['coin_amount']
-        self.comment: str = source['comment']
-        _expiration_time = source['expiration_time']
-        self.expiration_time: Optional[datetime.datetime] = datetime.datetime.fromisoformat(_expiration_time) if _expiration_time else None
-        _creation_time = source['_creation_time']
-        self.creation_time: Optional[datetime.datetime] = datetime.datetime.fromisoformat(_creation_time) if _creation_time else None
-        self.return_url: str = source['return_url']
-        _pay_history = source['pay_history']
-        self.pay_history: Optional[list[PayHistory]] = list(map(lambda x: PayHistory(x), _pay_history)) if _pay_history else None
+    status: bool
+    creator_id: int
+    invoice_unique_hash: str
+    coin_id: int
+    coin_amount: int
+    comment: str
+    expiration_time: datetime.datetime
+    creation_time: datetime.datetime
+    return_url: str
+    pay_history: list[PayHistory] | list
+
+    def __init__(self,status,creator_id,invoice_unique_hash,coin_id,coin_amount,comment,expiration_time,creation_time,return_url,pay_history):
+        self.status = status
+        self.creator_id = creator_id
+        self.invoice_unique_hash = invoice_unique_hash
+        self.coin_id = coin_id
+        self.coin_amount = coin_amount
+        self.comment = comment
+        self.expiration_time = datetime.datetime.fromisoformat(expiration_time)
+        self.creation_time = datetime.datetime.fromisoformat(creation_time)
+        self.return_url = return_url
+        self.pay_history = [PayHistory(**x) for x in pay_history]
 
     @property
     def is_payed(self): return len(self.pay_history) > 0
@@ -154,26 +163,32 @@ class Wallet:
         """Returns None if invalid invoice"""
         return await self.check_expired_invoice(invoice)
     
-    async def check_expired_invoice(self, invoice: Union[InvoiceMy, InvoiceInfo, str]) -> Union[bool, None]:
-        """Returns None if invalid invoice"""
-        if isinstance(invoice, str): 
+    async def check_expired_invoice(self, invoice: Union[InvoiceMy, InvoiceInfo, str]) -> bool:
+        """Check invoice's expiration time
+
+        Args:
+            invoice (Union[InvoiceMy, InvoiceInfo, str]): Which invoice need in check
+
+        Returns:
+            bool: Invoice is expired or not
+        """
+        if isinstance(invoice, str):
             assert isinstance(invoice, str), "wth"
             invoice = await self.check_invoice(invoice)
         
-        if not isinstance(invoice, InvoiceMy): 
-            return None
         if invoice.is_expired:
             status = await self.delete_invoice(invoice.invoice_unique_hash)
             return True
         return False
     
     async def get_balance(self, coin_id: int) -> dict:
-        """
-        Get balance of WAV/TWAV (coin_id: 1 — WAV, 2 — TWAV)
-        :param coin_id: which balance do you need
-        :type coin_id: integer
-        :return: info about balance or error message
-        :rtype: dict
+        """Get balance of WAV/TWAV
+
+        Args:
+            coin_id (int): 1 — WAV, 2 — TWAV
+
+        Returns:
+            dict: info about balance or error message
         """
         result = await self._get_req("/user/get_balance", params=dict(coin_id=coin_id))
         return result
@@ -186,15 +201,16 @@ class Wallet:
             await self.delete_invoice(invoice_current.invoice_unique_hash)
     
     async def delete_invoice(self, unique_hash: str) -> bool:
+        """Delete some invoice by his unique hash
+
+        Args:
+            unique_hash (str): Invoice's unique hash
+
+        Returns:
+            bool: Delete is success or not
         """
-        Delete some invoice by his unique hash
-        :param unique_hash: Invoice's unique hash
-        :type unique_hash: str
-        :return: result: True is success else False
-        :rtype: bool
-        """
-        _result = await self._get_req(f"/invoice/delete_invoice", act="delete", params=dict(invoice_unique_hash=unique_hash))
-        result = _result['status', 'False']
+        response = await self._get_req(f"/invoice/delete_invoice", act="delete", params=dict(invoice_unique_hash=unique_hash))
+        result = response.get('status', 'False')
         return result
     
     async def get_all_invoices(self) -> list[InvoiceMy]:
@@ -202,7 +218,9 @@ class Wallet:
         Get all invoices in dict
         """
         response = await self._get_req("/invoice/my_invoices")
-        invoices = list(map(lambda inv: InvoiceMy(inv), response['data']))
+        if response.get('error'):
+            raise Exception(str(response))
+        invoices = [InvoiceMy(**inv) for inv in response['data']]
         return invoices
     
     # invoice/счёт
@@ -218,11 +236,17 @@ class Wallet:
         :rtype:
         """
         response = await self._get_req('/invoice/create_invoice', act="post", params=dict(coin_id=coin_id, coin_amount=coin_amount, expiration_time=expiration_time, comment=comment, return_url=return_url if return_url else ""))
+        if response.get('error'):
+            raise Exception(str(response))
+        
         invoice_id: str = response['invoice_unique_hash']
     
         if invoice_id is None:
             await self.check_expired_invoices()
             response = await self._get_req('/invoice/create_invoice', act="post", params=dict(coin_id=coin_id, coin_amount=coin_amount, expiration_time=expiration_time, comment=comment, return_url=return_url if return_url else ""))
+            if response.get('error'):
+                raise Exception(str(response))
+            
             invoice_id = response['invoice_unique_hash']
         
         result = await self.check_invoice(invoice_id)
@@ -231,17 +255,17 @@ class Wallet:
     
     async def pay_invoice(self, unique_hash: str) -> bool:
         """Pay invoice"""
-        _result = await self._get_req(f"/invoice/pay_invoice", act="post", params=dict(invoice_unique_hash=unique_hash))
-        result = _result.get('status', False)
+        response = await self._get_req(f"/invoice/pay_invoice", act="post", params=dict(invoice_unique_hash=unique_hash))
+        result = response.get('status', False)
         return result
     
     async def check_invoice(self, unique_hash: str) -> InvoiceInfo:
         """Return InvoiceInfo or None if invalid"""
         response = await self._get_req(f"/invoice/get_invoice_data", params=dict(invoice_unique_hash=unique_hash))
-        if response.get('status'):
-            result = InvoiceInfo(response)
-        else:
+        if response.get('error'):
             raise Exception(str(response))
+        
+        result = InvoiceInfo(**response)
         return result
     
     async def wait_pay_invoice(self, unique_hash: str) -> Union[bool, None]:
@@ -263,11 +287,16 @@ class Wallet:
         return result
     
     async def claim_cheque(self, cheque_id: str, password: str = '') -> ChequeClaimed:
-        """"""
-        result = ChequeClaimed(await self._get_req(f"/user/claim_cheque", act="post", params=dict(cheque_id=cheque_id, password=password)))
+        response = await self._get_req(f"/user/claim_cheque", act="post", params=dict(cheque_id=cheque_id, password=password))
+        if response.get('error'):
+            raise Exception(str(response))
+        result = ChequeClaimed(**response)
         return result
     
     async def check_cheque(self, cheque_id: str) -> Cheque:
-        result = Cheque(await self._get_req(f"/user/info_cheque", params=dict(cheque_id=cheque_id)))
+        response = await self._get_req(f"/user/info_cheque", params=dict(cheque_id=cheque_id))
+        if response.get('error'):
+            raise Exception(str(response))
+        result = Cheque(**response)
         result.add_hash(cheque_id)
         return result
