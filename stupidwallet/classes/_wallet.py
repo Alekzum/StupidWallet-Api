@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Union, Literal, Optional
+from typing import Union, Literal
 import datetime
 import asyncio
 import httpx
@@ -197,7 +197,7 @@ class Wallet:
         """Returns None if invalid invoice"""
         return await self.check_expired_invoice(invoice)
     
-    async def check_expired_invoice(self, invoice: Union[InvoiceMy, InvoiceInfo, str]) -> bool:
+    async def check_expired_invoice(self, _invoice: Union[InvoiceMy, InvoiceInfo, str]) -> bool:
         """Check invoice's expiration time
 
         Args:
@@ -206,10 +206,10 @@ class Wallet:
         Returns:
             bool: Invoice is expired or not
         """
-        if isinstance(invoice, str):
-            assert isinstance(invoice, str), "wth"
-            invoice = await self.check_invoice(invoice)
-        
+        if isinstance(_invoice, str):
+            assert isinstance(_invoice, str), "wth"
+            invoice = await self.check_invoice(_invoice)
+        assert isinstance(invoice, (InvoiceMy, InvoiceInfo)), 'wth'
         if invoice.is_expired:
             status = await self.delete_invoice(invoice.invoice_unique_hash)
             return True
@@ -268,7 +268,7 @@ class Wallet:
             invoice_id = response['invoice_unique_hash']
         
         result = await self.check_invoice(invoice_id)
-        # LOGGER.info(str(locals()))
+        assert isinstance(result, InvoiceInfo), "wth"
         return result
     
     async def pay_invoice(self, unique_hash: str) -> bool:
@@ -277,40 +277,51 @@ class Wallet:
         result = response.get('status', False)
         return result
     
-    async def get_invoice_data(self, unique_hash: str) -> InvoiceInfo: return await self.check_invoice(unique_hash)
-    async def check_invoice(self, unique_hash: str) -> InvoiceInfo:
-        """Return InvoiceInfo or None if invalid"""
+    async def get_invoice_data(self, unique_hash: str) -> InvoiceInfo | None: return await self.check_invoice(unique_hash)
+    async def check_invoice(self, unique_hash: str) -> InvoiceInfo | None:
         response = await self._get_req(f"/invoice/get_invoice_data", params=dict(invoice_unique_hash=unique_hash))
-        
+        if response.get("error"): return None
         result = InvoiceInfo(**response)
         return result
     
+    async def wait_claim_cheque(self, unique_hash: str) -> bool:
+        """Ожидает получение чека. Если ожидаемого чека не существует, возвращает None, иначе если чек забрали, возвращает True"""
+        cheque = await self.info_cheque(unique_hash)
+        if cheque is None: raise ValueError("invalid cheque!")
+        
+        while not cheque.is_activated:  # type: ignore[union-attr]
+            await asyncio.sleep(5)
+            cheque = await self.info_cheque(unique_hash)
+        
+        return cheque.is_activated  # type: ignore[union-attr]
+    
     async def wait_pay_invoice(self, unique_hash: str) -> Union[bool, None]:
-        """Ожидает оплаты счёта в течении минуты. Если ожидаемого счёта не существует, возвращает None, иначе если оплачен счёт и он не просрочен, возвращает True, иначе False"""
+        """Ожидает оплаты счёта. Если ожидаемого счёта не существует, возвращает None, иначе если оплачен счёт и он не просрочен, возвращает True, иначе False"""
         invoice = await self.check_invoice(unique_hash)
         if invoice is None: return None
         
-        while not (invoice.is_payed or invoice.is_expired):
-            await asyncio.sleep(1)
+        while not (invoice.is_payed or invoice.is_expired):  # type: ignore[union-attr]
+            await asyncio.sleep(5)
             invoice = await self.check_invoice(unique_hash)
         
-        return invoice.is_payed
+        return invoice.is_payed  # type: ignore[union-attr]
     
     # Cheque / чек
     async def create_cheque(self, coin_id: int, coin_amount: int, comment="*комментарий к чеку*") -> ChequeInfo:
         """Создаёт чек и возвращает его"""
         cheque_id = (await self._get_req(f'/user/create_cheque', act="post", params=dict(coin_id=coin_id,coin_amount=coin_amount,comment=comment)))['cheque_id']
         result = await self.check_cheque(cheque_id)
-        return result
+        return result  # type: ignore[return-value]
 
     async def claim_cheque(self, cheque_id: str, password: str = '') -> ChequeClaimed:
         response = await self._get_req(f"/user/claim_cheque", act="post", params=dict(cheque_id=cheque_id, password=password))
         result = ChequeClaimed(**response)
         return result
 
-    async def info_cheque(self, cheque_id: str) -> ChequeInfo: return await self.check_cheque(cheque_id)
-    async def check_cheque(self, cheque_id: str) -> ChequeInfo:
+    async def info_cheque(self, cheque_id: str) -> ChequeInfo | None: return await self.check_cheque(cheque_id)
+    async def check_cheque(self, cheque_id: str) -> ChequeInfo | None:
         response = await self._get_req(f"/user/info_cheque", params=dict(cheque_id=cheque_id))
+        if response.get('error'): return None
         response["cheque_id"] = cheque_id
         result = ChequeInfo(**response)
         return result
