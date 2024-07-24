@@ -209,6 +209,8 @@ class Wallet:
         if isinstance(_invoice, str):
             assert isinstance(_invoice, str), "wth"
             invoice = await self.check_invoice(_invoice)
+        else:
+            invoice = _invoice  # type: ignore[assignment]
         assert isinstance(invoice, (InvoiceMy, InvoiceInfo)), 'wth'
         if invoice.is_expired:
             status = await self.delete_invoice(invoice.invoice_unique_hash)
