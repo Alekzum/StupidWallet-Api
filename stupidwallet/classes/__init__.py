@@ -1,1 +1,1 @@
-from ._wallet import Wallet, Cheque, ChequeClaimed, ChequeMy, Invoice, InvoiceInfo, InvoiceMy, PayHistory
+from ._wallet import Wallet, Cheque, ChequeClaimed, ChequeMy, InvoiceInfo, InvoiceMy, PayHistory
