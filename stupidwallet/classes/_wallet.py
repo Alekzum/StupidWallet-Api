@@ -6,11 +6,18 @@ import httpx
 
 
 @dataclass()
+class Coin:
+    coin_id: int
+    coin_name: str
+    coin_symbol: str
+
+
+@dataclass()
 class ChequeMy:
+    cheque_id: str
     coin_id: int
     coin_amount: int
     password: str
-    cheque_id: str
     comment: str
     
     @property
@@ -24,23 +31,28 @@ class ChequeMy:
         return f"""{type(self).__name__}({dict([(name, getattr(self, name)) for name in dir(self) if name[0] != "_"])})"""
 
 
-@dataclass
-class Cheque(ChequeMy):
+@dataclass()
+class ChequeInfo:
     status: bool
+    is_activated: bool
     coin_id: int
     coin_amount: int
-    is_activated: bool
     has_password: bool
     comment: str
     cheque_id: str
     
+    @property
+    def url(self):
+        return f"https://t.me/stupidwallet_bot?start={self.cheque_id}"
+    
     def __str__(self):
-        return f"<Cheque {self.cheque_id} is_activated={self.is_activated} id{self.coin_id}*{self.coin_amount}>"
+        return f"<ChequeInfo {self.cheque_id} is_activated={self.is_activated} id{self.coin_id}*{self.coin_amount}>"
 
-    def add_hash(self, hash: str):
-        self.cheque_id = hash
+    def __repr__(self):
+        return f"""ChequeInfo({','.join(["{}={}".format(name, getattr(self,name))for name in dir(self) if name[0]!="_"])})"""
 
-@dataclass
+
+@dataclass()
 class ChequeClaimed:
     """Info about claimed cheque: how much and which coin"""
     status: bool
@@ -148,8 +160,30 @@ class Wallet:
         else:
             raise ValueError(f'Excepted "post", "get", "delete", not {act!r}!')
         await asyncio.sleep(0.33)
+        jsoned: dict = r.json()
+        if jsoned.get('error'):
+            print(f"[WARN] {jsoned}")
         return r.json()
     
+    async def existing_coins(self) -> list[Coin] | list:
+        response = await self._get_req("/base/existing_coins")
+        result = [Coin(**c) for c in response['data']]
+        return result
+        
+
+    async def get_balance(self, coin_id: int) -> dict:
+        """Get balance of WAV/TWAV
+
+        Args:
+            coin_id (int): 1 — WAV, 2 — TWAV
+
+        Returns:
+            dict: info about balance or error message
+        """
+        result = await self._get_req("/user/get_balance", params=dict(coin_id=coin_id))
+        return result
+    
+    # invoices
     async def check_expired_invoices(self):
         """
         Check if invoices expiration time < current time
@@ -181,18 +215,6 @@ class Wallet:
             return True
         return False
     
-    async def get_balance(self, coin_id: int) -> dict:
-        """Get balance of WAV/TWAV
-
-        Args:
-            coin_id (int): 1 — WAV, 2 — TWAV
-
-        Returns:
-            dict: info about balance or error message
-        """
-        result = await self._get_req("/user/get_balance", params=dict(coin_id=coin_id))
-        return result
-    
     async def clear_invoices(self) -> None:
         """
         Just delete all invoices
@@ -213,17 +235,15 @@ class Wallet:
         result = response.get('status', 'False')
         return result
     
+    async def my_invoices(self) -> list[InvoiceMy]: return await self.get_all_invoices()
     async def get_all_invoices(self) -> list[InvoiceMy]:
         """
         Get all invoices in dict
         """
         response = await self._get_req("/invoice/my_invoices")
-        if response.get('error'):
-            raise Exception(str(response))
         invoices = [InvoiceMy(**inv) for inv in response['data']]
         return invoices
     
-    # invoice/счёт
     async def create_invoice(self, coin_id: int, coin_amount: int, expiration_time: int = 60, comment="", return_url="") -> InvoiceInfo:
         """
         Create invoice and return his hash in dict
@@ -236,8 +256,6 @@ class Wallet:
         :rtype:
         """
         response = await self._get_req('/invoice/create_invoice', act="post", params=dict(coin_id=coin_id, coin_amount=coin_amount, expiration_time=expiration_time, comment=comment, return_url=return_url if return_url else ""))
-        if response.get('error'):
-            raise Exception(str(response))
         
         invoice_id: str = response['invoice_unique_hash']
     
@@ -259,11 +277,10 @@ class Wallet:
         result = response.get('status', False)
         return result
     
+    async def get_invoice_data(self, unique_hash: str) -> InvoiceInfo: return await self.check_invoice(unique_hash)
     async def check_invoice(self, unique_hash: str) -> InvoiceInfo:
         """Return InvoiceInfo or None if invalid"""
         response = await self._get_req(f"/invoice/get_invoice_data", params=dict(invoice_unique_hash=unique_hash))
-        if response.get('error'):
-            raise Exception(str(response))
         
         result = InvoiceInfo(**response)
         return result
@@ -280,23 +297,25 @@ class Wallet:
         return invoice.is_payed
     
     # Cheque / чек
-    async def create_cheque(self, coin_id: int, coin_amount: int, comment="*комментарий к чеку*") -> Cheque:
+    async def create_cheque(self, coin_id: int, coin_amount: int, comment="*комментарий к чеку*") -> ChequeInfo:
         """Создаёт чек и возвращает его"""
         cheque_id = (await self._get_req(f'/user/create_cheque', act="post", params=dict(coin_id=coin_id,coin_amount=coin_amount,comment=comment)))['cheque_id']
         result = await self.check_cheque(cheque_id)
         return result
-    
+
     async def claim_cheque(self, cheque_id: str, password: str = '') -> ChequeClaimed:
         response = await self._get_req(f"/user/claim_cheque", act="post", params=dict(cheque_id=cheque_id, password=password))
-        if response.get('error'):
-            raise Exception(str(response))
         result = ChequeClaimed(**response)
         return result
-    
-    async def check_cheque(self, cheque_id: str) -> Cheque:
+
+    async def info_cheque(self, cheque_id: str) -> ChequeInfo: return await self.check_cheque(cheque_id)
+    async def check_cheque(self, cheque_id: str) -> ChequeInfo:
         response = await self._get_req(f"/user/info_cheque", params=dict(cheque_id=cheque_id))
-        if response.get('error'):
-            raise Exception(str(response))
-        result = Cheque(**response)
-        result.add_hash(cheque_id)
+        response["cheque_id"] = cheque_id
+        result = ChequeInfo(**response)
+        return result
+
+    async def my_cheques(self) -> list[ChequeMy] | list:
+        response = await self._get_req(f"/user/my_cheques")
+        result = [ChequeMy(**c) for c in response['data']]
         return result
