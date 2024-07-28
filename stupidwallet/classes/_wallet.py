@@ -152,7 +152,7 @@ class Wallet:
     _client: httpx.AsyncClient
     
     def __init__(self, api_key: str, base_url: str = "https://swapi.physm.org"):
-        self._client = httpx.AsyncClient(base_url=base_url, headers={"api-key": api_key})
+        self._client = httpx.AsyncClient(base_url=base_url, headers={"api-key": api_key}, timeout=30)
     
     async def _get_req(self, path, act: Literal["post", "get", "delete"] = "get", **kwargs) -> dict:
         if act == "post":
@@ -165,8 +165,8 @@ class Wallet:
             raise ValueError(f'Excepted "post", "get", "delete", not {act!r}!')
         await asyncio.sleep(0.33)
         jsoned: dict = r.json()
-        if jsoned.get('error'):
-            logger.warning(jsoned)
+        if jsoned.get('error') or jsoned.get("detail"):
+            raise Exception(f"Error! {jsoned.get('error')}: {jsoned.get('detail')}")
         return r.json()
     
     async def existing_coins(self) -> list[Coin] | list:
