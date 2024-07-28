@@ -221,9 +221,9 @@ class Wallet:
         assert isinstance(invoice, (InvoiceMy, InvoiceInfo)), 'wth'
         if invoice.is_expired:
             status = await self.delete_invoice(invoice.invoice_unique_hash)
-            logger.debug(f"{'Deleted' if status else 'Not deleted'} invoice {_invoice.invoice_unique_hash}")
+            logger.debug(f"{'Deleted' if status else 'Not deleted'} invoice {invoice.invoice_unique_hash}")
             return True
-        logger.debug(f"Invoice {_invoice.invoice_unique_hash} is not expired")
+        logger.debug(f"Invoice {invoice.invoice_unique_hash} is not expired")
         return False
     
     async def clear_invoices(self) -> None:
