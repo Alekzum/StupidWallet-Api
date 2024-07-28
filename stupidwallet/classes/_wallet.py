@@ -1,8 +1,12 @@
 from dataclasses import dataclass
-from typing import Union, Literal
+from typing import Union, Literal, Optional
 import datetime
 import asyncio
+import logging
 import httpx
+
+
+logger = logging.getLogger("stupidwallet")
 
 
 @dataclass()
@@ -162,7 +166,7 @@ class Wallet:
         await asyncio.sleep(0.33)
         jsoned: dict = r.json()
         if jsoned.get('error'):
-            print(f"[WARN] {jsoned}")
+            logger.warning(jsoned)
         return r.json()
     
     async def existing_coins(self) -> list[Coin] | list:
@@ -180,6 +184,7 @@ class Wallet:
         Returns:
             dict: info about balance or error message
         """
+        logger.debug("Getting balance...")
         result = await self._get_req("/user/get_balance", params=dict(coin_id=coin_id))
         return result
     
@@ -189,9 +194,11 @@ class Wallet:
         Check if invoices expiration time < current time
         if it is, delete this invoice
         """
-        invoices = (await self.get_all_invoices())
+        logger.debug("Getting all invoices..")
+        invoices = await self.get_all_invoices()
         for _invoice in invoices:
             await self.check_expired_invoice(_invoice)
+            logger.debug(f"Checked invoice {_invoice.invoice_unique_hash}")
     
     async def is_invoice_expired(self, invoice: Union[InvoiceMy, InvoiceInfo, str]):
         """Returns None if invalid invoice"""
@@ -214,15 +221,20 @@ class Wallet:
         assert isinstance(invoice, (InvoiceMy, InvoiceInfo)), 'wth'
         if invoice.is_expired:
             status = await self.delete_invoice(invoice.invoice_unique_hash)
+            logger.debug(f"{'Deleted' if status else 'Not deleted'} invoice {_invoice.invoice_unique_hash}")
             return True
+        logger.debug(f"Invoice {_invoice.invoice_unique_hash} is not expired")
         return False
     
     async def clear_invoices(self) -> None:
         """
         Just delete all invoices
         """
-        for invoice_current in (await self.get_all_invoices()):
-            await self.delete_invoice(invoice_current.invoice_unique_hash)
+        logger.debug("Getting all invoices..")
+        invoices = await self.get_all_invoices()
+        for invoice in invoices:
+            success = await self.delete_invoice(invoice.invoice_unique_hash)
+            logger.debug(f"{'Deleted' if success else 'Not deleted'} invoice {invoice.invoice_unique_hash}")
     
     async def delete_invoice(self, unique_hash: str) -> bool:
         """Delete some invoice by his unique hash
@@ -234,7 +246,7 @@ class Wallet:
             bool: Delete is success or not
         """
         response = await self._get_req(f"/invoice/delete_invoice", act="delete", params=dict(invoice_unique_hash=unique_hash))
-        result = response.get('status', 'False')
+        result = response.get('status', False)
         return result
     
     async def my_invoices(self) -> list[InvoiceMy]: return await self.get_all_invoices()
@@ -257,11 +269,13 @@ class Wallet:
         :return: dictionary with status and invoice hash
         :rtype:
         """
+        logger.debug("Creating invoice...")
         response = await self._get_req('/invoice/create_invoice', act="post", params=dict(coin_id=coin_id, coin_amount=coin_amount, expiration_time=expiration_time, comment=comment, return_url=return_url if return_url else ""))
         
-        invoice_id: str = response['invoice_unique_hash']
+        invoice_id: Optional[str] = response.get('invoice_unique_hash')
     
         if invoice_id is None:
+            logger.debug("Didn't founded invoice_unique_hash, maybe too much invoices?")
             await self.check_expired_invoices()
             response = await self._get_req('/invoice/create_invoice', act="post", params=dict(coin_id=coin_id, coin_amount=coin_amount, expiration_time=expiration_time, comment=comment, return_url=return_url if return_url else ""))
             if response.get('error'):
@@ -269,6 +283,7 @@ class Wallet:
             
             invoice_id = response['invoice_unique_hash']
         
+        logger.debug("Invoice created")
         result = await self.check_invoice(invoice_id)
         assert isinstance(result, InvoiceInfo), "wth"
         return result
@@ -277,6 +292,7 @@ class Wallet:
         """Pay invoice"""
         response = await self._get_req(f"/invoice/pay_invoice", act="post", params=dict(invoice_unique_hash=unique_hash))
         result = response.get('status', False)
+        logger.debug(f"Invoice {unique_hash} is {'payed' if result else 'not payed'}")
         return result
     
     async def get_invoice_data(self, unique_hash: str) -> InvoiceInfo | None: return await self.check_invoice(unique_hash)
@@ -311,13 +327,17 @@ class Wallet:
     # Cheque / чек
     async def create_cheque(self, coin_id: int, coin_amount: int, comment="*комментарий к чеку*") -> ChequeInfo:
         """Создаёт чек и возвращает его"""
+        logger.debug(f"Creating cheque...")
         cheque_id = (await self._get_req(f'/user/create_cheque', act="post", params=dict(coin_id=coin_id,coin_amount=coin_amount,comment=comment)))['cheque_id']
         result = await self.check_cheque(cheque_id)
+        logger.debug(f"Cheque is created")
         return result  # type: ignore[return-value]
 
     async def claim_cheque(self, cheque_id: str, password: str = '') -> ChequeClaimed:
+        logger.debug(f"Claiming cheque...")
         response = await self._get_req(f"/user/claim_cheque", act="post", params=dict(cheque_id=cheque_id, password=password))
         result = ChequeClaimed(**response)
+        logger.debug(f"Cheque is claimed")
         return result
 
     async def info_cheque(self, cheque_id: str) -> ChequeInfo | None: return await self.check_cheque(cheque_id)
@@ -329,6 +349,8 @@ class Wallet:
         return result
 
     async def my_cheques(self) -> list[ChequeMy] | list:
+        logger.debug(f"Getting cheques...")
         response = await self._get_req(f"/user/my_cheques")
         result = [ChequeMy(**c) for c in response['data']]
+        logger.debug(f"Cheques are getted")
         return result

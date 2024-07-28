@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "stupidwallet"
-version = "0.1.13"
+version = "0.1.14"
 description = "The package which use StupidWallet API"
 authors = ["Alekzum <68947902+Alekzum@users.noreply.github.com>"]
 license = "GNU GPLv3"
